@@ -3418,7 +3418,7 @@ export const useQueryStore = defineStore("query", () => {
     return id;
   }
 
-  function openObjectBrowser(connectionId: string, database: string, schema?: string, catalog?: string, eventName?: string, eventReadOnly = false, initialObjectFilter?: "tables" | "events", eventCreateRequestId?: number) {
+  function openObjectBrowser(connectionId: string, database: string, schema?: string, catalog?: string, eventName?: string, eventReadOnly = false, initialObjectFilter?: ObjectBrowserFilter, eventCreateRequestId?: number) {
     const title = catalog ? `${catalog}.${database} objects` : schema ? `${schema} objects` : `${database} objects`;
     const existing = tabs.value.find((tab) => tab.mode === "objects" && tab.connectionId === connectionId && tab.database === database && (tab.objectBrowser?.catalog || "") === (catalog || "") && (tab.objectBrowser?.schema || "") === (schema || ""));
     if (existing) {
@@ -3442,6 +3442,12 @@ export const useQueryStore = defineStore("query", () => {
           initialObjectFilter: initialObjectFilter ?? (eventName ? "events" : existing.objectBrowser?.initialObjectFilter),
           eventOpenRequestId: (existing.objectBrowser?.eventOpenRequestId ?? 0) + 1,
         };
+      } else if (initialObjectFilter) {
+        // 新增：非事件场景下切换 filter
+        existing.objectBrowser = {
+          ...existing.objectBrowser,
+          initialObjectFilter,
+        };
       }
       switchTab(existing.id);
       return existing.id;
@@ -3462,7 +3468,7 @@ export const useQueryStore = defineStore("query", () => {
       objectBrowser: {
         catalog,
         schema,
-        objectType: "tables",
+        objectType: initialObjectFilter ?? "tables",
         eventName: eventCreateRequestId !== undefined ? undefined : eventName,
         eventReadOnly: eventCreateRequestId !== undefined ? false : eventReadOnly,
         initialObjectFilter: initialObjectFilter ?? (eventName || eventCreateRequestId !== undefined ? "events" : undefined),

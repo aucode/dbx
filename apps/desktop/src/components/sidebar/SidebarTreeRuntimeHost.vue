@@ -88,6 +88,7 @@ import type { PluginContextMenuInvocation } from "@/lib/plugins/pluginContext";
 import type { InstalledPlugin, PluginContextMenuContribution, PluginWorkbenchContribution } from "@/types/database";
 import { useDatabaseOptions } from "@/composables/useDatabaseOptions";
 import type { ColumnInfo, ConnectionConfig, DatabaseType, TreeNode, TreeNodeType } from "@/types/database";
+import type { ObjectBrowserFilter } from "@/types/database";
 import * as api from "@/lib/backend/api";
 import type { ElasticsearchIndexMetadataKind } from "@/lib/backend/tauri";
 import { queryTimeoutSecsForConnection } from "@/lib/sql/queryTimeout";
@@ -823,6 +824,33 @@ function isGroupLabel(node: TreeNode): boolean {
   return groupTypes.has(node.type);
 }
 
+function objectBrowserFilterGroupNode(type: TreeNodeType): ObjectBrowserFilter | undefined {
+  switch (type) {
+    case "group-tables":
+      return "tables";
+    case "group-views":
+      return "views";
+    case "group-materialized-views":
+      return "materializedViews";
+    case "group-procedures":
+      return "procedures";
+    case "group-functions":
+      return "functions";
+    case "group-triggers":
+      return "triggers";
+    case "group-events":
+      return "events";
+    case "group-sequences":
+      return "sequences";
+    case "group-packages":
+      return "packages";
+    case "group-types":
+      return "types";
+    default:
+      return undefined;
+  }
+}
+
 async function openDirectNavigationNode(node: TreeNode, requestId: number) {
   if (!node.connectionId) return;
   const isNacosNavigation = node.type === "nacos-namespace" || node.type === "nacos-access-control";
@@ -1206,6 +1234,17 @@ function runRowClickAction(clickDetail: number) {
     void loadMoreObjectGroupChildren();
     return;
   }
+
+  // 添加分支，点击对应的数据库对象，右侧自动显示对应类型的对象列表；
+  // 如果右侧窗口已经打开，则自动切换到该列表；
+  // 影响数据库对象 表、视图、物化视图、存储过程、函数、触发器、事件、序列、包、类型；
+  const filter = objectBrowserFilterGroupNode(node.type);
+  if (filter && node.connectionId && hasTreeNodeDatabaseContext(node)) {
+    if (clickDetail > 1) return;
+    void openObjectBrowserForGroupNode(node, filter);
+    return;
+  }
+
   if (node.type === "object-browser") {
     if (clickDetail > 1) return;
     beginNavigationRequest();
@@ -1265,6 +1304,11 @@ function runRowClickAction(clickDetail: number) {
   } else if (action === "toggle") {
     void toggle(requestId);
   }
+}
+
+function openObjectBrowserForGroupNode(node: TreeNode, filter: ObjectBrowserFilter) {
+  if (!node.connectionId) return;
+  void openObjectBrowser(false, false, true, filter);
 }
 
 function refreshActiveKvBrowserAfterOpen(mode: "etcd" | "zookeeper" | "consul", connectionId: string) {
@@ -1894,7 +1938,9 @@ async function confirmDeleteSavedSqlFile() {
   releaseActiveNodeReference([node.id]);
 }
 
-async function openObjectBrowser(eventReadOnly = false, openEventEditor: boolean | "create" = false, focusSearch = false) {
+// 扩展 initialFilter 字段位于方法尾部，用来控制打开的窗口类型；
+// initialFilter 字段是非必填字段，调用方法时可以不填，不影响原来方法调用；
+async function openObjectBrowser(eventReadOnly = false, openEventEditor: boolean | "create" = false, focusSearch = false, initialFilter?: ObjectBrowserFilter) {
   const node = activeNode.value;
   if (!node.connectionId) return;
   try {
@@ -1903,7 +1949,7 @@ async function openObjectBrowser(eventReadOnly = false, openEventEditor: boolean
 
     const eventName = openEventEditor === true && node.type === "event" ? node.objectName || node.label : undefined;
     const eventCreateRequestId = openEventEditor === "create" && node.type === "group-events" ? ++mysqlEventCreateRequestSeq : undefined;
-    const objectFilter = node.type === "event" || node.type === "group-events" ? "events" : undefined;
+    const objectFilter = initialFilter ?? (node.type === "event" || node.type === "group-events" ? "events" : undefined);
 
     const connection = connectionStore.getConfig(node.connectionId);
     if (!connection) return;

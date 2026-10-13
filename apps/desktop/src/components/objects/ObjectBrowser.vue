@@ -199,7 +199,7 @@ const props = defineProps<{
   initialEventOpenRequestId?: number;
   /** 显式"新建事件"请求号：每次菜单点击递增，用于打开/重新进入 CREATE 编辑器 */
   initialEventCreateRequestId?: number;
-  initialObjectFilter?: "tables" | "events";
+  initialObjectFilter?: ObjectBrowserFilter;
   selectedObjectFilter?: ObjectFilter;
   initialSearchQuery?: string;
   viewport?: ObjectBrowserViewport;
@@ -3333,6 +3333,18 @@ watch([() => props.initialEventName, () => props.initialEventOpenRequestId, () =
   }
   openInitialEventIfNeeded();
 });
+
+// 监听 props.initialObjectFilter，当它变化时，把组件内部的 objectFilter 同步成这个新值
+watch(
+  () => props.initialObjectFilter,
+  (newFilter, oldFilter) => {
+    if (newFilter && newFilter !== oldFilter && objectFilter.value !== newFilter) {
+      objectFilter.value = newFilter;
+      userHasSelectedFilter.value = false;
+    }
+  },
+  { immediate: true },
+);
 
 // 达梦的对象列表 SQL 固定 `WHERE o.OWNER = ?`（DamengAgent），空 schema 必然
 // 匹配 0 行；schema 解析失败（loadSchemas 抛错或返回空列表）时标签会整体空白
